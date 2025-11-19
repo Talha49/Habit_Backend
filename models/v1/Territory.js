@@ -54,7 +54,6 @@ const territorySchema = new mongoose.Schema({
 });
 
 // Indexes for efficient queries
-territorySchema.index({ cellId: 1 });
 territorySchema.index({ categoryId: 1, status: 1 });
 territorySchema.index({ claimedBy: 1 });
 territorySchema.index({ coordinates: '2dsphere' }); // Geospatial index

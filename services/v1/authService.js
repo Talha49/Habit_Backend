@@ -37,7 +37,12 @@ function sanitizeUser(user) {
     isVerified: obj.isVerified,
     verifiedAt: obj.verifiedAt,
     createdAt: obj.createdAt,
-    updatedAt: obj.updatedAt
+    updatedAt: obj.updatedAt,
+    createdVia: obj.createdVia,
+    clerkId: obj.clerkId,
+    clerkLinkedAt: obj.clerkLinkedAt,
+    lastClerkLoginAt: obj.lastClerkLoginAt,
+    authProviders: obj.authProviders || ['legacy'],
   };
 }
 
@@ -571,5 +576,6 @@ module.exports = {
   createLinkInvite,
   acceptLinkInvite,
   revokeLink,
-  listUserLinks
+  listUserLinks,
+  sanitizeUser,
 };

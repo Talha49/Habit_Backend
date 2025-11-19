@@ -45,7 +45,6 @@ const userLinkSchema = new mongoose.Schema({
   timestamps: true
 });
 
-userLinkSchema.index({ inviteCode: 1 });
 userLinkSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('UserLinkV1', userLinkSchema);

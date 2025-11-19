@@ -12,5 +12,6 @@ router.post('/links/invite', authController.createLinkInvite);
 router.post('/links/accept', authController.acceptLinkInvite);
 router.post('/links/revoke', authController.revokeLink);
 router.get('/links', authController.listLinks);
+router.get('/me', authController.getCurrentUser);
 
 module.exports = router;

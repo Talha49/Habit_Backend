@@ -15,9 +15,28 @@ const userSchema = new mongoose.Schema({
   verifiedAt: { type: Date, default: null },
   verificationMethod: {
     type: String,
-    enum: ['otp', 'manual', 'admin'],
+    enum: ['otp', 'manual', 'admin', 'clerk'],
     default: null
   },
+  createdVia: {
+    type: String,
+    enum: ['legacy', 'clerk'],
+    default: 'legacy',
+    index: true
+  },
+  authProviders: {
+    type: [String],
+    default: ['legacy']
+  },
+  clerkId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  clerkPrimaryEmail: { type: String, lowercase: true, trim: true },
+  clerkLinkedAt: { type: Date },
+  lastClerkLoginAt: { type: Date },
+  additionalEmails: [{ type: String, lowercase: true, trim: true }],
   // OTP related fields
   otp: { type: String },
   otpExpiry: { type: Date },

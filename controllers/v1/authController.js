@@ -9,7 +9,8 @@ const {
   createLinkInvite,
   acceptLinkInvite,
   revokeLink,
-  listUserLinks
+  listUserLinks,
+  sanitizeUser,
 } = require('../../services/v1/authService');
 
 exports.register = async (req, res) => {
@@ -170,5 +171,44 @@ exports.listLinks = async (req, res) => {
   } catch (err) {
     console.error('❌ List links failed:', err.message);
     res.status(400).json({ success: false, error: err.message });
+  }
+};
+
+const buildClerkProfile = (clerkUser) => {
+  if (!clerkUser) {
+    return null;
+  }
+
+  const primaryEmail = clerkUser.primaryEmailAddress?.emailAddress || null;
+
+  return {
+    id: clerkUser.id,
+    email: primaryEmail,
+    firstName: clerkUser.firstName || null,
+    lastName: clerkUser.lastName || null,
+    imageUrl: clerkUser.imageUrl || null,
+  };
+};
+
+exports.getCurrentUser = async (req, res) => {
+  try {
+    if (req.clerkLinkedUser) {
+      return res.status(200).json({
+        success: true,
+        source: 'clerk',
+        user: sanitizeUser(req.clerkLinkedUser),
+        clerk: buildClerkProfile(req.clerkUser),
+        linkMeta: {
+          matchType: req.clerkLinkMatchType || null,
+          wasLinked: Boolean(req.clerkLinkWasLinked),
+          wasCreated: Boolean(req.clerkLinkWasCreated),
+        },
+      });
+    }
+
+    return res.status(401).json({ success: false, error: 'Not authenticated' });
+  } catch (error) {
+    console.error('❌ getCurrentUser failed:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to load session user' });
   }
 };
