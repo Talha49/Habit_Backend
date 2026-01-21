@@ -1,37 +1,41 @@
 const mongoose = require('mongoose');
 
 const territorySchema = new mongoose.Schema({
-  cellId: { 
-    type: String, 
-    required: true, 
+  cellId: {
+    type: String,
+    required: true,
     unique: true,
     trim: true
   },
-  categoryId: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  categoryId: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'CategoryV1',
     required: true
   },
-  claimedBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  claimedBy: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'UserV1',
     default: null
   },
-  status: { 
-    type: String, 
-    enum: ['unclaimed', 'claimed', 'contested'],
+  status: {
+    type: String,
+    enum: ['unclaimed', 'claimed', 'contested', 'locked'],
     default: 'unclaimed'
   },
-  claimDate: { 
-    type: Date, 
+  lockedUntil: {
+    type: Date,
     default: null
   },
-  lastActivity: { 
-    type: Date, 
+  claimDate: {
+    type: Date,
+    default: null
+  },
+  lastActivity: {
+    type: Date,
     default: Date.now
   },
-  activityCount: { 
-    type: Number, 
+  activityCount: {
+    type: Number,
     default: 0
   },
   coordinates: {
@@ -45,12 +49,12 @@ const territorySchema = new mongoose.Schema({
       required: true
     }
   },
-  isActive: { 
-    type: Boolean, 
-    default: true 
+  isActive: {
+    type: Boolean,
+    default: true
   }
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
 // Indexes for efficient queries

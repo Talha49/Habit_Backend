@@ -5,6 +5,7 @@ const connectDB = require('./config/db');
 const config = require('./config');
 const { seedCategories } = require('./scripts/seedCategories');
 const { clerkMiddleware, attachClerkAuthContext } = require('./middleware/clerkAuth');
+const { initCronJobs } = require('./services/cronService');
 
 // Load env vars
 dotenv.config();
@@ -24,11 +25,16 @@ app.use('/v1/categories', require('./routes/v1/categoryRoutes'));
 app.use('/v1/territories', require('./routes/v1/territoryRoutes'));
 app.use('/v1/geofences', require('./routes/v1/geofenceRoutes'));
 app.use('/v1/location', require('./routes/v1/locationRoutes'));
+app.use('/v1/habits', require('./routes/v1/habitRoutes'));
+app.use('/v1/doctor', require('./routes/v1/doctorRoutes'));
+app.use('/v1/stats', require('./routes/v1/statsRoutes'));
 
 const startServer = async () => {
   try {
     await connectDB();
     await seedCategories();
+    require('./services/gamificationService').seedBadges();
+    initCronJobs();
 
     const PORT = config.PORT;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

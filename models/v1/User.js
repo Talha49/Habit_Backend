@@ -42,6 +42,14 @@ const userSchema = new mongoose.Schema({
   otpExpiry: { type: Date },
   otpCooldown: { type: Date }, // Prevents spam requests
   isVerified: { type: Boolean, default: false },
+  level: { type: Number, default: 1 },
+  totalXP: { type: Number, default: 0 },
+  currentXP: { type: Number, default: 0 },
+  categoryXP: {
+    type: Map,
+    of: Number,
+    default: {}
+  },
   loginAttempts: { type: Number, default: 0 },
   lastLoginAttempt: { type: Date },
   resetInProgress: { type: Boolean, default: false },

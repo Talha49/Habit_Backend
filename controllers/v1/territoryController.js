@@ -2,6 +2,7 @@ const Territory = require('../../models/v1/Territory');
 const Category = require('../../models/v1/Category');
 const GeoFence = require('../../models/v1/Geofence');
 const User = require('../../models/v1/User');
+const TerritoryLog = require('../../models/v1/TerritoryLog');
 
 // Helper to compute distance between two coordinates in meters
 const haversineDistance = (lat1, lon1, lat2, lon2) => {
@@ -159,6 +160,32 @@ exports.claimTerritory = async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
+    // 1. HABIT ENERGY CHECK
+    // User must have completed at least one habit "today" (last 24h roughly or calendar day)
+    // We check HabitLog for entries in the last 18 hours to be safe/generous for "today"
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // Check if user has any habit log today
+    const habitLog = await require('../../models/v1/HabitLog').findOne({
+      userId,
+      completedAt: { $gte: startOfDay }
+    });
+
+    if (!habitLog) {
+      return res.status(400).json({
+        success: false,
+        error: 'No Habit Energy! Complete a habit today to claim territory.',
+        meta: { type: 'NO_HABIT_ENERGY' }
+      });
+    }
+
+    // 2. STREAK CHECK (For Locking Bonus)
+    // Find user's best CURRENT streak in any active habit
+    const habits = await require('../../models/v1/Habit').find({ userId, isActive: true });
+    const maxStreak = Math.max(0, ...habits.map(h => h.streak));
+    const shouldLock = maxStreak > 3; // Rule: Streak > 3 locks territory
+
     // If the user is a child, enforce geo-zone restrictions only when zones exist
     if (user.role === 'child') {
       const activeZones = await GeoFence.find({ child: userId, active: true });
@@ -180,31 +207,27 @@ exports.claimTerritory = async (req, res) => {
     let territory = await Territory.findOne({ cellId });
 
     if (territory) {
-      if (territory.status === 'claimed' && territory.claimedBy.toString() !== userId) {
-        await territory.populate('claimedBy', 'fullName email');
-        await territory.populate('categoryId', 'name color icon');
+      // 3. LOCK CHECK (Defense)
+      if (territory.status === 'locked' && territory.lockedUntil && new Date() < territory.lockedUntil) {
+        if (territory.claimedBy.toString() !== userId) {
+          return res.status(403).json({
+            success: false,
+            error: 'Territory is LOCKED by a high-streak player!',
+            meta: { type: 'TERRITORY_LOCKED' }
+          });
+        }
+      }
 
-        return res.status(409).json({
-          success: false,
-          error: 'This territory is already claimed by another player.',
-          meta: {
-            type: 'TERRITORY_ALREADY_CLAIMED',
-            claimant: {
-              id: territory.claimedBy?._id,
-              name: territory.claimedBy?.fullName,
-              email: territory.claimedBy?.email,
-            },
-            category: {
-              id: territory.categoryId?._id,
-              name: territory.categoryId?.name,
-            },
-          },
-        });
+      if (territory.status === 'claimed' && territory.claimedBy.toString() !== userId) {
+        // Stealing logic (allowed if not locked)
+        // Check if stealing player has higher streak? (Optional rule, skipping for MVP)
       }
 
       // Update existing territory
-      territory.status = 'claimed';
+      territory.status = shouldLock ? 'locked' : 'claimed';
+      territory.lockedUntil = shouldLock ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null;
       territory.claimedBy = userId;
+      territory.categoryId = categoryId; // Allow changing category if stealing
       territory.claimDate = new Date();
       territory.lastActivity = new Date();
       territory.activityCount += 1;
@@ -219,7 +242,8 @@ exports.claimTerritory = async (req, res) => {
         cellId,
         categoryId,
         claimedBy: userId,
-        status: 'claimed',
+        status: shouldLock ? 'locked' : 'claimed',
+        lockedUntil: shouldLock ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null,
         claimDate: new Date(),
         lastActivity: new Date(),
         activityCount: 1,
@@ -236,12 +260,35 @@ exports.claimTerritory = async (req, res) => {
     await territory.populate('categoryId', 'name color icon');
     await territory.populate('claimedBy', 'fullName email');
 
-    console.log(`✅ Territory ${cellId} claimed successfully`);
+    // GAMIFICATION REWARDS
+    const gamificationService = require('../../services/gamificationService');
+    // Award 50 XP for claiming territory (Category Specific)
+    const xpResult = await gamificationService.addXP(userId, 50, categoryId);
+
+    // Check for Badges (Territory Count)
+    // Count total claimed territories by user
+    const totalClaimed = await Territory.countDocuments({ claimedBy: userId, status: { $in: ['claimed', 'locked'] } });
+    const newBadges = await gamificationService.checkBadges(userId, 'territory_count', totalClaimed);
+
+    // LOG ENTRY
+    await TerritoryLog.create({
+      territoryId: territory._id,
+      userId,
+      action: territory.status === 'locked' ? 'lock' : 'claim',
+      details: `Claimed in category: ${categoryId}`
+    });
+
+    console.log(`✅ Territory ${cellId} claimed successfully. Locked: ${shouldLock}. XP: +50`);
 
     res.status(200).json({
       success: true,
-      message: 'Territory claimed successfully',
-      data: territory
+      message: shouldLock ? 'Territory Claimed & LOCKED! 🔒' : 'Territory Claimed!',
+      data: territory,
+      rewards: {
+        xpEarned: 50,
+        newLevel: xpResult?.levelUp ? xpResult.newLevel : null,
+        newBadges: newBadges
+      }
     });
   } catch (err) {
     console.error('❌ Claim territory failed:', err.message);
@@ -294,6 +341,14 @@ exports.releaseTerritory = async (req, res) => {
     await territory.populate('claimedBy', 'fullName email');
 
     console.log(`✅ Territory ${cellId} released successfully`);
+
+    // LOG ENTRY
+    await TerritoryLog.create({
+      territoryId: territory._id,
+      userId: userId,
+      action: 'release',
+      details: 'Manual release by user'
+    });
 
     res.status(200).json({
       success: true,
@@ -354,6 +409,40 @@ exports.updateActivity = async (req, res) => {
       success: false,
       error: 'Failed to update territory activity',
       message: err.message
+    });
+  }
+};
+
+// Get territory history
+exports.getTerritoryHistory = async (req, res) => {
+  console.log('📜 Get Territory History API hit:', req.params.cellId);
+  try {
+    const { cellId } = req.params;
+
+    // Find territory first to get its ID
+    const territory = await Territory.findOne({ cellId });
+
+    if (!territory) {
+      return res.status(404).json({
+        success: false,
+        error: 'Territory not found'
+      });
+    }
+
+    const logs = await TerritoryLog.find({ territoryId: territory._id })
+      .populate('userId', 'fullName email')
+      .sort({ createdAt: -1 })
+      .limit(20);
+
+    res.status(200).json({
+      success: true,
+      data: logs
+    });
+  } catch (err) {
+    console.error('❌ Get territory history failed:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get history'
     });
   }
 };

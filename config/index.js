@@ -10,7 +10,8 @@ module.exports = {
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
   EMAIL_USER: process.env.APP_EMAIL,
   EMAIL_PASS: process.env.APP_PASS,
-  // etc.
+  JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || '30d',
+  JWT_REFRESH_DAYS: process.env.JWT_REFRESH_DAYS || 30,
 };
 
 // Debug logging for email config

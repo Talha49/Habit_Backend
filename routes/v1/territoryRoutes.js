@@ -17,4 +17,7 @@ router.post('/release', territoryController.releaseTerritory);
 // POST /v1/territories/activity - Update territory activity
 router.post('/activity', territoryController.updateActivity);
 
+// GET /v1/territories/:cellId/history - Get territory history
+router.get('/:cellId/history', territoryController.getTerritoryHistory);
+
 module.exports = router;

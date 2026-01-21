@@ -33,9 +33,10 @@ module.exports = async function resolveAuthUser(req, _res, next) {
     }
   } catch (error) {
     console.warn('⚠️ resolveAuthUser: failed to resolve auth user:', error.message);
-  } finally {
-    next();
   }
+
+  // Proceed to next middleware
+  next();
 };
 
 
