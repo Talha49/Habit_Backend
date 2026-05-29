@@ -1,6 +1,8 @@
 const Habit = require('../../models/v1/Habit');
 const HabitLog = require('../../models/v1/HabitLog');
 const mongoose = require('mongoose');
+const User = require('../../models/v1/User');
+const Squad = require('../../models/v1/Squad');
 
 // Helper to get start of day in UTC to compare dates roughly
 // For production, this should ideally accept a timezone from the client
@@ -77,7 +79,10 @@ exports.checkIn = async (req, res) => {
     try {
         const { id } = req.params;
         const userId = req.user.id;
-        const now = new Date();
+        const now    = new Date();
+
+        // Accept anti-cheat payload from client
+        const { gpsData, timerData } = req.body;
 
         const habit = await Habit.findOne({ _id: id, userId });
 
@@ -94,57 +99,104 @@ exports.checkIn = async (req, res) => {
         let newStreak = habit.streak;
 
         if (!habit.lastCompletedAt) {
-            // First time completion
             newStreak = 1;
         } else {
             const diff = getDiffDays(now, habit.lastCompletedAt);
             if (diff === 1) {
-                // Consecutive day
                 newStreak += 1;
             } else if (diff > 1) {
-                // Missed a day (or more)
                 newStreak = 1;
             }
-            // If diff === 0, it's caught by the idempotency check above
         }
 
         // Update stats
         habit.streak = newStreak;
-        if (newStreak > habit.bestStreak) {
-            habit.bestStreak = newStreak;
-        }
+        if (newStreak > habit.bestStreak) habit.bestStreak = newStreak;
         habit.totalCompletions += 1;
-        habit.lastCompletedAt = now;
-
+        habit.lastCompletedAt  = now;
         await habit.save();
 
-        // Create Log
-        await HabitLog.create({
-            habitId: habit._id,
+        // Create HabitLog (initially pending)
+        const habitLog = await HabitLog.create({
+            habitId:   habit._id,
             userId,
-            completedAt: now
+            completedAt: now,
+            gpsData:    gpsData   || undefined,
+            timerData:  timerData || undefined,
         });
 
-        // GAMIFICATION REWARDS
-        const gamificationService = require('../../services/gamificationService');
-        // Award 10 XP for check-in (Category Specific)
-        const xpResult = await gamificationService.addXP(userId, 10, habit.categoryId);
-        // Check for Badge (Streak based)
-        const newBadges = await gamificationService.checkBadges(userId, 'streak', newStreak);
+        // ── ANTI-CHEAT VALIDATION ──────────────────────────────────────────────
+        let validationSummary = {};
+        let finalStatus       = 'pending';
+        try {
+            const antiCheat = require('../../services/antiCheatService');
+            const result = await antiCheat.runValidation({
+                userId,
+                habit,
+                habitLogId: habitLog._id,
+                gpsData,
+                timerData,
+                now,
+            });
+            finalStatus       = result.finalStatus;      // 'verified' | 'flagged'
+            validationSummary = result.validationSummary;
 
-        console.log(`✅ Check-in successful for: ${habit.title}. Streak: ${newStreak}`);
+            // Persist the final status back onto the log
+            habitLog.validationStatus = finalStatus;
+            await habitLog.save();
+        } catch (acErr) {
+            console.warn('⚠️ Anti-cheat validation error (non-critical):', acErr.message);
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
+        // GAMIFICATION REWARDS  (only grant XP for verified/pending logs, NOT flagged)
+        const gamificationService = require('../../services/gamificationService');
+        const XP_PER_CHECKIN = 10;
+        let xpResult, newBadges, squadXPAwarded = false;
+
+        if (finalStatus !== 'flagged') {
+            xpResult  = await gamificationService.addXP(userId, XP_PER_CHECKIN, habit.categoryId);
+            newBadges = await gamificationService.checkBadges(userId, 'streak', newStreak);
+
+            // SQUAD CONTRIBUTION
+            try {
+                const user = await User.findById(userId).select('squadId');
+                if (user?.squadId) {
+                    const squad = await Squad.findById(user.squadId).select('categoryId totalXP contributions');
+                    if (squad && squad.categoryId.toString() === habit.categoryId.toString()) {
+                        squad.totalXP += XP_PER_CHECKIN;
+                        const prevContrib = squad.contributions.get(userId.toString()) || 0;
+                        squad.contributions.set(userId.toString(), prevContrib + XP_PER_CHECKIN);
+                        await squad.save();
+                        squadXPAwarded = true;
+                        console.log(`🏆 Squad XP +${XP_PER_CHECKIN}. Member contrib: ${prevContrib + XP_PER_CHECKIN}`);
+                    }
+                }
+            } catch (squadErr) {
+                console.warn('⚠️ Squad XP update failed (non-critical):', squadErr.message);
+            }
+        } else {
+            console.warn(`🚨 Flagged check-in for habit "${habit.title}" by user ${userId}. XP withheld.`);
+        }
+
+        console.log(`✅ Check-in [${finalStatus.toUpperCase()}] for: ${habit.title}. Streak: ${newStreak}`);
 
         res.status(200).json({
             success: true,
             data: {
                 ...habit.toObject(),
-                completedToday: true
+                completedToday: true,
             },
-            rewards: {
-                xpEarned: 10,
-                newLevel: xpResult?.levelUp ? xpResult.newLevel : null,
-                newBadges: newBadges
-            }
+            validation: {
+                status: finalStatus,
+                summary: validationSummary,
+            },
+            rewards: finalStatus !== 'flagged' ? {
+                xpEarned:      XP_PER_CHECKIN,
+                newLevel:      xpResult?.levelUp ? xpResult.newLevel : null,
+                newBadges:     newBadges,
+                squadXPAwarded,
+            } : { xpEarned: 0, message: 'XP withheld – validation flagged' },
         });
 
     } catch (err) {
@@ -152,6 +204,7 @@ exports.checkIn = async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
 
 // Undo Check-in (Optional, for accidental clicks)
 exports.undoCheckIn = async (req, res) => {

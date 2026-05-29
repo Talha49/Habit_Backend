@@ -5,6 +5,9 @@ const territoryController = require('../../controllers/v1/territoryController');
 // GET /v1/territories - Get territories by location and category
 router.get('/', territoryController.getTerritories);
 
+// GET /v1/territories/leaderboard - Get local dominance leaderboard
+router.get('/leaderboard', territoryController.getLocalLeaderboard);
+
 // GET /v1/territories/:cellId - Get single territory by cell ID
 router.get('/:cellId', territoryController.getTerritoryByCellId);
 

@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const Territory = require('../models/v1/Territory');
 const TerritoryLog = require('../models/v1/TerritoryLog');
+const { runCoachNotificationSweep } = require('./coachAgentService');
 
 const DECAY_DAYS = 7;
 
@@ -56,6 +57,19 @@ exports.initCronJobs = () => {
 
         } catch (error) {
             console.error('❌ Territory Decay Job Failed:', error);
+        }
+    });
+
+    // Run every hour for proactive AI coach reminders.
+    cron.schedule('0 * * * *', async () => {
+        console.log('🤖 Running Coach Notification Sweep...');
+        try {
+            const result = await runCoachNotificationSweep();
+            console.log(
+                `✅ Coach sweep done. Users scanned: ${result.usersScanned}, notifications created: ${result.notificationsCreated}`
+            );
+        } catch (error) {
+            console.error('❌ Coach Notification Sweep Failed:', error.message);
         }
     });
 };

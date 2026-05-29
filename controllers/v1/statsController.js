@@ -24,6 +24,7 @@ exports.getDashboardSummary = async (req, res) => {
         // 3. Category Breakdown (Full List)
         const categoryBreakdown = [];
         let bestCategory = null;
+        let bestCategoryDetails = null;
         let maxXP = -1;
 
         if (user.categoryXP && user.categoryXP.size > 0) {

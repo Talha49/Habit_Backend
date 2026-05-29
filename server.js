@@ -28,6 +28,9 @@ app.use('/v1/location', require('./routes/v1/locationRoutes'));
 app.use('/v1/habits', require('./routes/v1/habitRoutes'));
 app.use('/v1/doctor', require('./routes/v1/doctorRoutes'));
 app.use('/v1/stats', require('./routes/v1/statsRoutes'));
+app.use('/v1/coaching', require('./routes/v1/coachingRoutes'));
+app.use('/v1/squads', require('./routes/v1/squadRoutes'));
+app.use('/v1/validation', require('./routes/v1/validationRoutes'));
 
 const startServer = async () => {
   try {

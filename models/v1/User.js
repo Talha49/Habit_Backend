@@ -60,7 +60,16 @@ const userSchema = new mongoose.Schema({
     userAgent: { type: String, default: null },
     createdAt: { type: Date, default: Date.now },
     expiresAt: { type: Date, required: true }
-  }]
+  }],
+  aiConsent: { type: Boolean, default: false },
+  aiInsightsCache: { type: Object, default: null },
+  aiInsightsCachedAt: { type: Date, default: null },
+  squadId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Squad',
+    default: null,
+    sparse: true
+  }
 }, { timestamps: true });
 
 // Index for OTP expiry cleanup

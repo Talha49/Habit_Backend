@@ -446,3 +446,112 @@ exports.getTerritoryHistory = async (req, res) => {
     });
   }
 };
+
+// Get local dominance leaderboard
+exports.getLocalLeaderboard = async (req, res) => {
+  console.log('🏆 Get Local Leaderboard API hit');
+  try {
+    const { latitude, longitude } = req.query;
+    const radiusKm = req.query.radius ? parseFloat(req.query.radius) : 10; // 10km default
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        success: false,
+        error: 'Latitude and longitude are required for local leaderboard'
+      });
+    }
+
+    const lat = parseFloat(latitude);
+    const lon = parseFloat(longitude);
+
+    if (Number.isNaN(lat) || Number.isNaN(lon)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Latitude and longitude must be valid numbers'
+      });
+    }
+
+    // 1. Find all active and claimed/locked territories within radius
+    const territories = await Territory.find({
+      isActive: true,
+      status: { $in: ['claimed', 'locked'] },
+      coordinates: {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [lon, lat]
+          },
+          $maxDistance: radiusKm * 1000
+        }
+      }
+    })
+    .populate('categoryId', 'name color icon')
+    .populate('claimedBy', 'fullName email xp level');
+
+    // 2. Group by Category and User
+    const dominanceMap = {};
+
+    territories.forEach(t => {
+      if (!t.categoryId || !t.claimedBy) return;
+
+      const catId = t.categoryId._id.toString();
+      const userId = t.claimedBy._id.toString();
+
+      if (!dominanceMap[catId]) {
+        dominanceMap[catId] = {
+          category: t.categoryId,
+          users: {}
+        };
+      }
+
+      if (!dominanceMap[catId].users[userId]) {
+        dominanceMap[catId].users[userId] = {
+          user: t.claimedBy,
+          territoryCount: 0
+        };
+      }
+
+      dominanceMap[catId].users[userId].territoryCount += 1;
+    });
+
+    // 3. Format into a sorted leaderboard per category
+    const leaderboard = [];
+
+    Object.values(dominanceMap).forEach(catData => {
+      const usersList = Object.values(catData.users);
+      
+      // Sort users by territoryCount descending, then by XP descending for ties
+      usersList.sort((a, b) => {
+        if (b.territoryCount !== a.territoryCount) {
+          return b.territoryCount - a.territoryCount;
+        }
+        // Tie-breaker: XP
+        const xpA = a.user.xp || 0;
+        const xpB = b.user.xp || 0;
+        return xpB - xpA;
+      });
+
+      leaderboard.push({
+        category: catData.category,
+        leadingUser: usersList.length > 0 ? usersList[0] : null,
+        topUsers: usersList.slice(0, 5) // Top 5 per category
+      });
+    });
+
+    // Sort categories alphabetically or by some order
+    leaderboard.sort((a, b) => a.category.name.localeCompare(b.category.name));
+
+    res.status(200).json({
+      success: true,
+      data: leaderboard
+    });
+
+  } catch (err) {
+    console.error('❌ Get leaderboard failed:', err.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate leaderboard',
+      message: err.message
+    });
+  }
+};
