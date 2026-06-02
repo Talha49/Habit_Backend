@@ -96,3 +96,98 @@ exports.getDashboardSummary = async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+exports.getPerformanceReport = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const habits = await Habit.find({ userId, isActive: true });
+        
+        // Fetch validation logs from the last 30 days
+        const ValidationLog = require('../../models/v1/ValidationLog');
+        const logs = await ValidationLog.find({
+            userId,
+            createdAt: { $gte: thirtyDaysAgo }
+        });
+
+        // Compute completion rates
+        let totalLogs = logs.length;
+        let passedLogs = logs.filter(l => l.status === 'passed').length;
+        let completionRate = totalLogs > 0 ? (passedLogs / totalLogs) * 100 : 0;
+
+        // Group by day for the last 7 days
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const last7DaysLogs = logs.filter(l => l.createdAt >= sevenDaysAgo);
+        
+        // A simple daily breakdown
+        const dailyData = {};
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            dailyData[d.toISOString().split('T')[0]] = 0;
+        }
+
+        last7DaysLogs.forEach(log => {
+            if (log.status === 'passed') {
+                const dateKey = log.createdAt.toISOString().split('T')[0];
+                if (dailyData[dateKey] !== undefined) {
+                    dailyData[dateKey] += 1;
+                }
+            }
+        });
+
+        const chartData = Object.keys(dailyData).map(date => ({
+            date,
+            count: dailyData[date]
+        }));
+
+        res.status(200).json({
+            success: true,
+            data: {
+                completionRate: completionRate.toFixed(1),
+                totalCheckIns: totalLogs,
+                passedCheckIns: passedLogs,
+                chartData,
+                habitsOverview: habits.map(h => ({ id: h._id, title: h.title, streak: h.streak }))
+            }
+        });
+
+    } catch (err) {
+        console.error('❌ Get report failed:', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.exportUserData = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        const user = await User.findById(userId).select('-password');
+        const habits = await Habit.find({ userId });
+        
+        const ValidationLog = require('../../models/v1/ValidationLog');
+        const validationLogs = await ValidationLog.find({ userId }).sort({ createdAt: -1 });
+
+        const Squad = require('../../models/v1/Squad');
+        const squads = await Squad.find({ members: userId });
+
+        const exportData = {
+            profile: user,
+            habits,
+            validationLogs,
+            squads
+        };
+
+        res.status(200).json({
+            success: true,
+            data: exportData
+        });
+
+    } catch (err) {
+        console.error('❌ Export data failed:', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+};

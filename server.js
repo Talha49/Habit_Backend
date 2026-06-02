@@ -10,7 +10,14 @@ const { initCronJobs } = require('./services/cronService');
 // Load env vars
 dotenv.config();
 
+const http = require('http');
+const socketService = require('./services/v1/socketService');
+
 const app = express();
+const server = http.createServer(app);
+
+// Initialize Socket.io
+socketService.init(server);
 
 // Enable CORS for all origins and methods
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
@@ -31,6 +38,8 @@ app.use('/v1/stats', require('./routes/v1/statsRoutes'));
 app.use('/v1/coaching', require('./routes/v1/coachingRoutes'));
 app.use('/v1/squads', require('./routes/v1/squadRoutes'));
 app.use('/v1/validation', require('./routes/v1/validationRoutes'));
+app.use('/v1/chat', require('./routes/v1/chatRoutes'));
+app.use('/v1/notifications', require('./routes/v1/notificationRoutes'));
 
 const startServer = async () => {
   try {
@@ -40,7 +49,7 @@ const startServer = async () => {
     initCronJobs();
 
     const PORT = config.PORT;
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
     process.exit(1);

@@ -13,5 +13,6 @@ router.post('/links/accept', authController.acceptLinkInvite);
 router.post('/links/revoke', authController.revokeLink);
 router.get('/links', authController.listLinks);
 router.get('/me', authController.getCurrentUser);
+router.post('/update-push-token', authController.updatePushToken);
 
 module.exports = router;

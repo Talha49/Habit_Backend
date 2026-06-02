@@ -69,7 +69,8 @@ const userSchema = new mongoose.Schema({
     ref: 'Squad',
     default: null,
     sparse: true
-  }
+  },
+  expoPushToken: { type: String, default: null }
 }, { timestamps: true });
 
 // Index for OTP expiry cleanup

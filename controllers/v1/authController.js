@@ -212,3 +212,22 @@ exports.getCurrentUser = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to load session user' });
   }
 };
+
+exports.updatePushToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    const userId = req.clerkLinkedUser ? req.clerkLinkedUser._id : (req.user ? req.user._id : null);
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const User = require('../../models/v1/User');
+    await User.findByIdAndUpdate(userId, { expoPushToken: token });
+
+    res.json({ success: true, message: 'Push token updated successfully' });
+  } catch (err) {
+    console.error('❌ updatePushToken failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

@@ -6,4 +6,10 @@ const { requireAuth } = require('../../middleware/requireAuth');
 // GET /v1/stats/dashboard
 router.get('/dashboard', requireAuth, statsController.getDashboardSummary);
 
+// GET /v1/stats/report
+router.get('/report', requireAuth, statsController.getPerformanceReport);
+
+// GET /v1/stats/export
+router.get('/export', requireAuth, statsController.exportUserData);
+
 module.exports = router;
